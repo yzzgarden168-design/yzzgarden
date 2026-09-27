@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: yuanzhizhu-geo-test
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: AIGEO_HOST
+        value: 0.0.0.0
+      - key: AIGEO_COOKIE_SECURE
+        value: "1"
+      - key: AIGEO_DATA_DIR
+        value: /tmp/aigeo-data
+      - key: AIGEO_ADMIN_USER
+        value: admin
+      - key: AIGEO_ADMIN_PASSWORD
+        sync: false
+      - key: AIGEO_SESSION_SECRET
+        generateValue: true
+      - key: AIGEO_AI_API_KEY
+        sync: false

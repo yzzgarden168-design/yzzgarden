@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="园之助 GEO 增长操作系统：监测 AI 推荐、统一商品事实并推动内容到成交闭环。">
+  <title>园之助 GEO 增长操作系统</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%230b3b2e'/%3E%3Cpath d='M18 18c18 0 28 11 28 28-17 0-28-10-28-28Z' fill='%23b9e66e'/%3E%3Cpath d='M22 22c8 6 14 13 20 22' stroke='%230b3b2e' stroke-width='4' fill='none'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles_v3.css">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="主导航">
+    <div class="brand-lockup"><span class="brand-mark">园</span><div><b>园之助</b><small>GEO Growth OS</small></div></div>
+    <nav id="primary-nav">
+      <button class="nav-item active" data-view="command"><span>01</span>今日指挥台</button>
+      <button class="nav-item" data-view="visibility"><span>02</span>AI 可见性</button>
+      <button class="nav-item" data-view="truth"><span>03</span>品牌真相中心</button>
+      <button class="nav-item" data-view="content"><span>04</span>内容与证据</button>
+      <button class="nav-item" data-view="channels"><span>05</span>渠道战台</button>
+      <button class="nav-item" data-view="audit"><span>06</span>技术审计</button>
+      <button class="nav-item" data-view="tasks"><span>07</span>任务中心</button>
+      <button class="nav-item" data-view="outcomes"><span>08</span>效果与归因</button>
+      <button class="nav-item" data-view="settings"><span>09</span>账号与系统</button>
+    </nav>
+    <div class="sidebar-foot"><span class="live-dot"></span><div><b>本地原型</b><small>示例经营数据 · 实时扫描可用</small></div></div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <button class="menu-btn" id="menu-btn" aria-label="打开导航">☰</button>
+      <div><p class="eyebrow" id="page-kicker">DAILY COMMAND</p><h1 id="page-title">今日指挥台</h1></div>
+      <div class="top-actions"><span class="sample-badge" id="data-mode">实时数据库</span><span class="sample-badge" id="current-user"></span><button class="ghost" id="logout-btn">退出</button><button class="ghost" id="global-add">＋ 新建问题</button><button class="primary" data-go="tasks">查看今日任务</button></div>
+    </header>
+
+    <section class="view active" id="command">
+      <div class="market-switch" role="group" aria-label="市场筛选"><button class="active" data-market="all">全部市场</button><button data-market="cn">中国 · 豆包优先</button><button data-market="us">美国 · Meta</button></div>
+      <div class="metric-grid" id="metric-grid"></div>
+      <div class="command-grid">
+        <article class="panel alerts-panel"><div class="panel-head"><div><p class="eyebrow">SIGNALS</p><h2>需要你关注</h2></div><span class="count" id="alert-count"></span></div><div id="alert-list"></div></article>
+        <article class="panel priority-panel"><div class="panel-head"><div><p class="eyebrow">NEXT BEST ACTION</p><h2>今天优先做</h2></div><button class="text-btn" data-go="tasks">全部任务 →</button></div><div id="priority-list"></div></article>
+        <article class="panel opportunity-panel"><div class="panel-head"><div><p class="eyebrow">OPPORTUNITY</p><h2>机会雷达</h2></div></div><div id="opportunity-radar"></div></article>
+      </div>
+      <div class="battle-grid" id="battle-grid"></div>
+    </section>
+
+    <section class="view" id="visibility">
+      <div class="view-toolbar"><div class="tabs"><button class="active" data-tab="questions">问题雷达</button><button data-tab="answers">回答实验室</button><button data-tab="sources">竞品与信源</button></div><button class="primary" id="add-question">＋ 添加监测问题</button></div>
+      <div class="tab-pane active" id="questions-pane">
+        <div class="filter-bar"><input id="question-search" type="search" placeholder="搜索问题、场景或商品…"><select id="question-intent"><option value="all">全部购买阶段</option><option>方案比较</option><option>商品选择</option><option>品类教育</option><option>安装使用</option></select><select id="question-market"><option value="all">全部市场</option><option value="cn">中国</option><option value="us">美国</option></select></div>
+        <div class="table-card"><table><thead><tr><th>消费者问题</th><th>阶段</th><th>市场 / 模型</th><th>园之助表现</th><th>主要赢家</th><th>机会分</th><th></th></tr></thead><tbody id="question-table"></tbody></table></div>
+      </div>
+      <div class="tab-pane" id="answers-pane"><div class="answer-lab" id="answer-lab"></div></div>
+      <div class="tab-pane" id="sources-pane"><div class="source-layout" id="source-layout"></div></div>
+    </section>
+
+    <section class="view" id="truth">
+      <div class="section-intro"><div><p class="eyebrow">SOURCE OF TRUTH</p><h2>所有内容先经过事实，再进入渠道</h2><p>统一品牌、商品和营销声明，发现六大店铺之间的冲突。</p></div><div><button class="ghost" id="import-store">导入店铺数据</button> <button class="ghost" id="add-product">＋ 添加商品</button> <button class="primary" id="add-claim">＋ 新增声明</button></div></div>
+      <div class="truth-metrics" id="truth-metrics"></div>
+      <div class="split-layout"><article class="panel"><div class="panel-head"><h2>声明与证据台账</h2><div class="legend"><i class="ok"></i>已证实 <i class="warn"></i>待验证</div></div><div id="claim-list"></div></article><article class="panel"><div class="panel-head"><h2>商品信息冲突</h2><span class="count danger">3 项</span></div><div id="conflict-list"></div></article></div>
+    </section>
+
+    <section class="view" id="content">
+      <div class="section-intro"><div><p class="eyebrow">EVIDENCE-LED CONTENT</p><h2>从真实回答缺口创建内容</h2><p>每一项内容都绑定问题、证据、渠道和发布后的复测。</p></div><button class="primary" id="create-brief">从机会创建 Brief</button></div>
+      <div class="workflow-strip"><div class="active"><span>1</span>机会 Brief</div><i>→</i><div><span>2</span>事实校验</div><i>→</i><div><span>3</span>人工审核</div><i>→</i><div><span>4</span>发布</div><i>→</i><div><span>5</span>7/14/30 天复测</div></div>
+      <div class="content-grid" id="content-board"></div>
+    </section>
+
+    <section class="view" id="channels">
+      <div class="view-toolbar"><div class="tabs" id="channel-tabs"><button class="active" data-channel="doubao">豆包专项</button><button data-channel="domestic">国内六店</button><button data-channel="meta">Meta / 美国</button></div></div>
+      <div id="channel-content"></div>
+    </section>
+
+    <section class="view" id="audit">
+      <div class="section-intro"><div><p class="eyebrow">TECHNICAL READINESS</p><h2>页面是否能被理解、引用和追溯</h2><p>这是真实联网扫描；评分仅用于诊断，不保证被 AI 收录或推荐。</p></div></div>
+      <form class="scan-form panel" id="scan-form"><label>需要扫描的公开网页<input id="scan-url" type="url" placeholder="https://example.com/product" required></label><label>品牌与实体词<input id="scan-keywords" placeholder="园之助，爬藤架，种植箱"></label><button class="primary" id="scan-btn">开始联网扫描</button></form>
+      <div id="scan-status" class="scan-status hidden"></div><div id="scan-result"></div>
+    </section>
+
+    <section class="view" id="tasks">
+      <div class="section-intro"><div><p class="eyebrow">ACTION CENTER</p><h2>每个任务都能追到一个增长缺口</h2><p>按商业影响、竞争差距和执行成本排序。</p></div><div class="task-filters"><button class="active" data-task-filter="all">全部</button><button data-task-filter="待处理">待处理</button><button data-task-filter="进行中">进行中</button><button data-task-filter="已完成">已完成</button></div></div>
+      <div class="task-board" id="task-board"></div>
+    </section>
+
+    <section class="view" id="outcomes">
+      <div class="section-intro"><div><p class="eyebrow">MEASUREMENT</p><h2>从 AI 推荐到辅助成交</h2><p>示例漏斗用于确认数据结构；接入店铺和站点数据后替换。</p></div><select><option>最近 30 天</option><option>最近 90 天</option></select></div>
+      <div class="funnel" id="funnel"></div>
+      <div class="split-layout"><article class="panel"><div class="panel-head"><h2>推荐占有率趋势</h2><span class="sample-badge">示例</span></div><div class="chart" id="trend-chart"></div></article><article class="panel"><div class="panel-head"><h2>渠道辅助结果</h2></div><div id="channel-outcomes"></div></article></div>
+    </section>
+    <section class="view" id="settings">
+      <div class="section-intro"><div><p class="eyebrow">ACCESS & SYSTEM</p><h2>账号、角色与生产连接</h2><p>管理员控制账号权限；密钥只通过云环境变量配置，不显示在浏览器。</p></div><button class="primary" id="add-user">＋ 新增账号</button></div>
+      <div class="split-layout"><article class="panel"><div class="panel-head"><h2>公司账号</h2><span class="count" id="user-count"></span></div><div id="user-list"></div></article><article class="panel"><div class="panel-head"><h2>连接状态</h2></div><div id="connection-list"></div></article></div>
+    </section>
+  </main>
+</div>
+
+<div class="modal-backdrop hidden" id="modal-backdrop"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button class="modal-close" id="modal-close" aria-label="关闭">×</button><div id="modal-body"></div></div></div>
+<div class="toast hidden" id="toast" role="status"></div>
+<script src="app_v3.js"></script>
+</body>
+</html>

@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>园之助AIGEO监控系统</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <header class="header">
+            <div class="logo">
+                <h1>🌳 园之助 AIGEO监控系统</h1>
+                <p class="subtitle">智能可视化进度管理平台</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" onclick="refreshData()">🔄 刷新数据</button>
+                <button class="btn btn-secondary" onclick="exportReport()">📥 导出报告</button>
+                <span class="current-time" id="currentTime"></span>
+            </div>
+        </header>
+
+        <!-- 导航标签 -->
+        <nav class="nav-tabs">
+            <button class="nav-tab active" data-tab="overview">📊 总览看板</button>
+            <button class="nav-tab" data-tab="progress">📈 进度管理</button>
+            <button class="nav-tab" data-tab="tasks">✅ 任务追踪</button>
+            <button class="nav-tab" data-tab="effects">📉 效果评估</button>
+            <button class="nav-tab" data-tab="keywords">🔍 关键词监控</button>
+            <button class="nav-tab" data-tab="content">📝 内容管理</button>
+        </nav>
+
+        <!-- 总览看板 -->
+        <section class="tab-content active" id="overview">
+            <!-- 核心指标卡片 -->
+            <div class="cards-grid">
+                <div class="card card-primary">
+                    <div class="card-header">
+                        <h3>总体进度</h3>
+                        <span class="card-icon">📊</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="big-number" id="overallProgress">35%</div>
+                        <p class="card-subtitle">30天计划执行情况</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 35%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card card-success">
+                    <div class="card-header">
+                        <h3>任务完成率</h3>
+                        <span class="card-icon">✅</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="big-number" id="taskCompletionRate">67%</div>
+                        <p class="card-subtitle">已完成 26/39 项任务</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill progress-success" style="width: 67%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card card-warning">
+                    <div class="card-header">
+                        <h3>关键词排名</h3>
+                        <span class="card-icon">🔍</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="big-number" id="keywordRanking">42%</div>
+                        <p class="card-subtitle">33/78 关键词有排名</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill progress-warning" style="width: 42%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card card-info">
+                    <div class="card-header">
+                        <h3>内容产出</h3>
+                        <span class="card-icon">📝</span>
+                    </div>
+                    <div class="card-body">
+                        <div class="big-number" id="contentOutput">23篇</div>
+                        <p class="card-subtitle">累计生产内容</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill progress-info" style="width: 46%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 图表区域 -->
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <h3>📈 进度趋势图</h3>
+                    <canvas id="progressTrendChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3>📊 任务分布图</h3>
+                    <canvas id="taskDistributionChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3>🎯 关键词排名变化</h3>
+                    <canvas id="keywordTrendChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3>📈 流量变化趋势</h3>
+                    <canvas id="trafficTrendChart"></canvas>
+                </div>
+            </div>
+
+            <!-- 快捷操作 -->
+            <div class="quick-actions">
+                <h3>⚡ 快捷操作</h3>
+                <div class="actions-grid">
+                    <button class="action-btn" onclick="showAddTask()">➕ 添加新任务</button>
+                    <button class="action-btn" onclick="runSEOCheck()">🔍 运行SEO检查</button>
+                    <button class="action-btn" onclick="generateContent()">📝 生成内容</button>
+                    <button class="action-btn" onclick="viewDetails()">📋 查看详情</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 进度管理 -->
+        <section class="tab-content" id="progress">
+            <div class="section-header">
+                <h2>📈 30天AIGEO执行进度</h2>
+                <div class="section-actions">
+                    <select id="progressFilter" onchange="filterProgress()">
+                        <option value="all">全部阶段</option>
+                        <option value="phase1">第一阶段：基础建设</option>
+                        <option value="phase2">第二阶段：内容生产</option>
+                        <option value="phase3">第三阶段：发布推广</option>
+                        <option value="phase4">第四阶段：优化调整</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="phase-progress">
+                <div class="phase-item phase-completed">
+                    <div class="phase-header">
+                        <h4>第一阶段：基础建设 (Day 1-7)</h4>
+                        <span class="phase-status">✅ 已完成</span>
+                    </div>
+                    <div class="phase-details">
+                        <div class="progress-bar">
+                            <div class="progress-fill progress-success" style="width: 100%"></div>
+                        </div>
+                        <p>完成率：100% (7/7 任务)</p>
+                    </div>
+                </div>
+
+                <div class="phase-item phase-active">
+                    <div class="phase-header">
+                        <h4>第二阶段：内容生产 (Day 8-14)</h4>
+                        <span class="phase-status">🔄 进行中</span>
+                    </div>
+                    <div class="phase-details">
+                        <div class="progress-bar">
+                            <div class="progress-fill progress-warning" style="width: 57%"></div>
+                        </div>
+                        <p>完成率：57% (4/7 任务)</p>
+                    </div>
+                </div>
+
+                <div class="phase-item phase-pending">
+                    <div class="phase-header">
+                        <h4>第三阶段：发布推广 (Day 15-21)</h4>
+                        <span class="phase-status">⏳ 待开始</span>
+                    </div>
+                    <div class="phase-details">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <p>完成率：0% (0/7 任务)</p>
+                    </div>
+                </div>
+
+                <div class="phase-item phase-pending">
+                    <div class="phase-header">
+                        <h4>第四阶段：优化调整 (Day 22-30)</h4>
+                        <span class="phase-status">⏳ 待开始</span>
+                    </div>
+                    <div class="phase-details">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <p>完成率：0% (0/9 任务)</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 日历视图 -->
+            <div class="calendar-view">
+                <h3>📅 执行日历（4月3日 - 5月2日）</h3>
+                <div class="calendar-grid" id="calendarGrid">
+                    <!-- 日历将通过JS动态生成 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- 任务追踪 -->
+        <section class="tab-content" id="tasks">
+            <div class="section-header">
+                <h2>✅ 任务追踪系统</h2>
+                <div class="section-actions">
+                    <button class="btn btn-primary" onclick="showAddTask()">➕ 添加任务</button>
+                    <button class="btn btn-secondary" onclick="exportTasks()">📥 导出任务</button>
+                </div>
+            </div>
+
+            <!-- 任务筛选 -->
+            <div class="task-filters">
+                <button class="filter-btn active" data-filter="all">全部</button>
+                <button class="filter-btn" data-filter="completed">已完成</button>
+                <button class="filter-btn" data-filter="in-progress">进行中</button>
+                <button class="filter-btn" data-filter="pending">待开始</button>
+                <button class="filter-btn" data-filter="overdue">已逾期</button>
+            </div>
+
+            <!-- 任务列表 -->
+            <div class="task-list" id="taskList">
+                <!-- 任务将通过JS动态生成 -->
+            </div>
+        </section>
+
+        <!-- 效果评估 -->
+        <section class="tab-content" id="effects">
+            <div class="section-header">
+                <h2>📉 AIGEO效果评估</h2>
+                <div class="section-actions">
+                    <select id="timeRange" onchange="updateEffectMetrics()">
+                        <option value="7">最近7天</option>
+                        <option value="14">最近14天</option>
+                        <option value="30" selected>最近30天</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 效果指标卡片 -->
+            <div class="effect-cards">
+                <div class="effect-card">
+                    <div class="effect-title">关键词总曝光量</div>
+                    <div class="effect-value" id="totalExposure">12,450</div>
+                    <div class="effect-trend positive">↑ 23.5%</div>
+                </div>
+                <div class="effect-card">
+                    <div class="effect-title">自然搜索流量</div>
+                    <div class="effect-value" id="organicTraffic">3,280</div>
+                    <div class="effect-trend positive">↑ 18.7%</div>
+                </div>
+                <div class="effect-card">
+                    <div class="effect-title">转化率</div>
+                    <div class="effect-value" id="conversionRate">4.2%</div>
+                    <div class="effect-trend positive">↑ 0.8%</div>
+                </div>
+                <div class="effect-card">
+                    <div class="effect-title">平均排名位置</div>
+                    <div class="effect-value" id="avgRanking">8.5</div>
+                    <div class="effect-trend positive">↑ 2.3</div>
+                </div>
+            </div>
+
+            <!-- 效果图表 -->
+            <div class="effect-charts">
+                <div class="effect-chart">
+                    <h3>📈 曝光量趋势</h3>
+                    <canvas id="exposureTrendChart"></canvas>
+                </div>
+                <div class="effect-chart">
+                    <h3>📊 流量来源分析</h3>
+                    <canvas id="trafficSourceChart"></canvas>
+                </div>
+            </div>
+
+            <!-- ROI分析 -->
+            <div class="roi-analysis">
+                <h3>💰 ROI投资回报分析</h3>
+                <div class="roi-grid">
+                    <div class="roi-item">
+                        <h4>总投入成本</h4>
+                        <div class="roi-value">¥850,000</div>
+                        <p class="roi-note">12个月累计</p>
+                    </div>
+                    <div class="roi-item">
+                        <h4>预期收益</h4>
+                        <div class="roi-value roi-positive">¥1,185,000</div>
+                        <p class="roi-note">年营收增长+¥800万，成本节约¥380万</p>
+                    </div>
+                    <div class="roi-item">
+                        <h4>投资回报率</h4>
+                        <div class="roi-value roi-success">139%</div>
+                        <p class="roi-note">回收期8.6个月</p>
+                    </div>
+                    <div class="roi-item">
+                        <h4>当前已产生收益</h4>
+                        <div class="roi-value roi-warning">¥98,500</div>
+                        <p class="roi-note">执行14天累计</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 关键词监控 -->
+        <section class="tab-content" id="keywords">
+            <div class="section-header">
+                <h2>🔍 关键词排名监控</h2>
+                <div class="section-actions">
+                    <button class="btn btn-primary" onclick="addKeyword()">➕ 添加关键词</button>
+                    <button class="btn btn-secondary" onclick="refreshRankings()">🔄 刷新排名</button>
+                </div>
+            </div>
+
+            <!-- 关键词统计 -->
+            <div class="keyword-stats">
+                <div class="stat-item">
+                    <div class="stat-value" id="totalKeywords">78</div>
+                    <div class="stat-label">总关键词数</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="rankedKeywords">33</div>
+                    <div class="stat-label">有排名关键词</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="top3Keywords">5</div>
+                    <div class="stat-label">前3位关键词</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value" id="top10Keywords">12</div>
+                    <div class="stat-label">前10位关键词</div>
+                </div>
+            </div>
+
+            <!-- 关键词表格 -->
+            <div class="keyword-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>关键词</th>
+                            <th>类型</th>
+                            <th>当前排名</th>
+                            <th>昨日排名</th>
+                            <th>变化</th>
+                            <th>搜索量</th>
+                            <th>难度</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="keywordTableBody">
+                        <!-- 关键词数据将通过JS动态生成 -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 内容管理 -->
+        <section class="tab-content" id="content">
+            <div class="section-header">
+                <h2>📝 内容产出管理</h2>
+                <div class="section-actions">
+                    <button class="btn btn-primary" onclick="generateNewContent()">📝 生成新内容</button>
+                    <button class="btn btn-secondary" onclick="batchPublish()">📤 批量发布</button>
+                </div>
+            </div>
+
+            <!-- 内容统计 -->
+            <div class="content-stats">
+                <div class="content-stat-item">
+                    <div class="content-stat-icon">📝</div>
+                    <div class="content-stat-value" id="totalContent">23</div>
+                    <div class="content-stat-label">总内容数</div>
+                </div>
+                <div class="content-stat-item">
+                    <div class="content-stat-icon">✅</div>
+                    <div class="content-stat-value" id="publishedContent">18</div>
+                    <div class="content-stat-label">已发布</div>
+                </div>
+                <div class="content-stat-item">
+                    <div class="content-stat-icon">📤</div>
+                    <div class="content-stat-value" id="pendingContent">5</div>
+                    <div class="content-stat-label">待发布</div>
+                </div>
+                <div class="content-stat-item">
+                    <div class="content-stat-icon">💬</div>
+                    <div class="content-stat-value" id="draftContent">0</div>
+                    <div class="content-stat-label">草稿</div>
+                </div>
+            </div>
+
+            <!-- 平台分布 -->
+            <div class="platform-distribution">
+                <h3>📱 平台内容分布</h3>
+                <canvas id="platformDistributionChart"></canvas>
+            </div>
+
+            <!-- 内容列表 -->
+            <div class="content-list">
+                <h3>📋 内容列表</h3>
+                <div class="content-items" id="contentList">
+                    <!-- 内容将通过JS动态生成 -->
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- 模态框 - 添加任务 -->
+    <div class="modal" id="addTaskModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>➕ 添加新任务</h3>
+                <button class="close-btn" onclick="closeModal('addTaskModal')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="addTaskForm">
+                    <div class="form-group">
+                        <label>任务名称</label>
+                        <input type="text" id="taskName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>所属阶段</label>
+                        <select id="taskPhase">
+                            <option value="phase1">第一阶段：基础建设</option>
+                            <option value="phase2">第二阶段：内容生产</option>
+                            <option value="phase3">第三阶段：发布推广</option>
+                            <option value="phase4">第四阶段：优化调整</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>优先级</label>
+                        <select id="taskPriority">
+                            <option value="high">高</option>
+                            <option value="medium">中</option>
+                            <option value="low">低</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>截止日期</label>
+                        <input type="date" id="taskDeadline" required>
+                    </div>
+                    <div class="form-group">
+                        <label>任务描述</label>
+                        <textarea id="taskDescription" rows="3"></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">保存任务</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态框 - 详情查看 -->
+    <div class="modal" id="detailsModal">
+        <div class="modal-content modal-large">
+            <div class="modal-header">
+                <h3>📋 详细信息</h3>
+                <button class="close-btn" onclick="closeModal('detailsModal')">&times;</button>
+            </div>
+            <div class="modal-body" id="detailsContent">
+                <!-- 详情内容将通过JS动态生成 -->
+            </div>
+        </div>
+    </div>
+
+    <script src="data.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
