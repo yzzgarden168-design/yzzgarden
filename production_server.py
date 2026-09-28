@@ -107,6 +107,62 @@ def init_db():
                       (username, password_hash(password), "系统管理员", "admin", now_iso()))
 
 
+def seed_demo_data():
+    """Populate a repeatable local demo only when explicitly enabled."""
+    if os.getenv("AIGEO_DEMO_MODE", "0") != "1": return
+    now = now_iso()
+    with db() as c:
+        if not c.execute("SELECT 1 FROM products LIMIT 1").fetchone():
+            products = [
+                ("YZ-PTJ-150", "园之助阳台爬藤架 150cm", "爬藤架", "包塑钢管"),
+                ("YZ-ZZX-40", "园之助阳台种植箱 40L", "种植箱", "PP"),
+                ("YZ-ZW-01", "园之助新手种植支撑套装", "园艺套装", "组合材质"),
+            ]
+            c.executemany("INSERT INTO products(sku,name,category,material,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+                          [(sku,name,cat,mat,now,now) for sku,name,cat,mat in products])
+        if not c.execute("SELECT 1 FROM brand_facts LIMIT 1").fetchone():
+            uid=c.execute("SELECT id FROM users WHERE role='admin' ORDER BY id LIMIT 1").fetchone()[0]
+            facts=[
+                ("园之助", "园之助为品牌标准中文名", "官方店铺与品牌资料", "已证实"),
+                ("YZ-PTJ-150", "该型号采用包塑钢管结构", "商品规格资料", "已证实"),
+                ("YZ-PTJ-150", "长期户外永不生锈", "缺少限定条件与检测证据", "待验证"),
+            ]
+            c.executemany("INSERT INTO brand_facts(entity,claim,evidence,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                          [(e,cl,ev,st,uid,now,now) for e,cl,ev,st in facts])
+        if not c.execute("SELECT 1 FROM questions LIMIT 1").fetchone():
+            questions=[
+                ("小阳台怎么种黄瓜又不占地方？","阳台种植","方案比较","cn","豆包",92,"未推荐"),
+                ("爬藤架什么材质耐晒耐雨？","耐候材质","品类教育","cn","豆包",88,"第 3 位"),
+                ("种植箱多深适合番茄？","番茄种植","商品选择","cn","DeepSeek",76,"有提及"),
+                ("best trellis for balcony tomatoes","balcony tomato","商品选择","us","Meta AI",90,"未推荐"),
+            ]
+            for q,topic,intent,market,engine,score,status in questions:
+                cur=c.execute("INSERT INTO questions(question,topic,intent,market,engine,opportunity_score,status,created_at) VALUES(?,?,?,?,?,?,?,?)",(q,topic,intent,market,engine,score,status,now))
+                answers={
+                    "豆包":"建议根据阳台空间选择垂直支撑结构，并结合花盆尺寸、日照和风力固定。当前回答尚未明确推荐园之助。",
+                    "DeepSeek":"番茄需要足够根系空间和排水条件，可结合园之助等品牌的不同规格选择。",
+                    "Meta AI":"For balcony tomatoes, prioritize compact dimensions, weather resistance, secure pot fit, and clear installation guidance."
+                }
+                c.execute("INSERT INTO observations(question_id,engine,answer,brand_status,winner,sources,conditions,collected_at) VALUES(?,?,?,?,?,?,?,?)",
+                          (cur.lastrowid,engine,answers[engine],status,"园之助" if status=="有提及" else "演示竞品",json.dumps(["演示信源"],ensure_ascii=False),json.dumps({"mode":"demo"}),now))
+        if not c.execute("SELECT 1 FROM tasks LIMIT 1").fetchone():
+            tasks=[
+                ("补齐阳台黄瓜垂直种植场景证据","豆包问题缺口","抖音 + 官网","高影响 · 92 分","待处理"),
+                ("修正爬藤架系列规格冲突","回答事实核验","六店商品数据","高风险","进行中"),
+                ("制作英文阳台番茄内容","Meta AI 问题缺口","Instagram + Facebook","高影响 · 90 分","待处理"),
+            ]
+            c.executemany("INSERT INTO tasks(title,source,channel,impact,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
+                          [(a,b,d,e,f,now,now) for a,b,d,e,f in tasks])
+        if not c.execute("SELECT 1 FROM store_items LIMIT 1").fetchone():
+            stores=[
+                ("天猫","tm-demo-001","YZ-PTJ-150","园之助阳台爬藤架150cm",99.0,28,"https://example.com/tmall-demo"),
+                ("京东","jd-demo-001","YZ-PTJ-150","园之助户外爬藤支架",109.0,16,"https://example.com/jd-demo"),
+                ("抖音","dy-demo-001","YZ-ZZX-40","园之助阳台种植箱40L",159.0,35,"https://example.com/douyin-demo"),
+            ]
+            c.executemany("INSERT INTO store_items(platform,external_id,sku,title,price,stock,url,raw_json,synced_at) VALUES(?,?,?,?,?,?,?,?,?)",
+                          [(p,e,s,t,pr,st,u,"{}",now) for p,e,s,t,pr,st,u in stores])
+
+
 def sign_token(token):
     sig = hmac.new(SECRET, token.encode(), hashlib.sha256).hexdigest()
     return f"{token}.{sig}"
@@ -309,6 +365,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     init_db()
+    seed_demo_data()
     host=os.getenv("AIGEO_HOST","127.0.0.1"); port=int(os.getenv("PORT",os.getenv("AIGEO_PORT","8765")))
     print(f"园之助 GEO Growth OS: http://{host}:{port}")
     ThreadingHTTPServer((host,port),Handler).serve_forever()
