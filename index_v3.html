@@ -15,13 +15,14 @@
     <nav id="primary-nav">
       <button class="nav-item active" data-view="command"><span>01</span>今日指挥台</button>
       <button class="nav-item" data-view="visibility"><span>02</span>AI 可见性</button>
-      <button class="nav-item" data-view="truth"><span>03</span>品牌真相中心</button>
-      <button class="nav-item" data-view="content"><span>04</span>内容与证据</button>
-      <button class="nav-item" data-view="channels"><span>05</span>渠道战台</button>
-      <button class="nav-item" data-view="audit"><span>06</span>技术审计</button>
-      <button class="nav-item" data-view="tasks"><span>07</span>任务中心</button>
-      <button class="nav-item" data-view="outcomes"><span>08</span>效果与归因</button>
-      <button class="nav-item" data-view="settings"><span>09</span>账号与系统</button>
+      <button class="nav-item" data-view="priority"><span>03</span>优先推荐引擎</button>
+      <button class="nav-item" data-view="truth"><span>04</span>品牌真相中心</button>
+      <button class="nav-item" data-view="content"><span>05</span>内容与证据</button>
+      <button class="nav-item" data-view="channels"><span>06</span>渠道战台</button>
+      <button class="nav-item" data-view="audit"><span>07</span>技术审计</button>
+      <button class="nav-item" data-view="tasks"><span>08</span>任务中心</button>
+      <button class="nav-item" data-view="outcomes"><span>09</span>效果与归因</button>
+      <button class="nav-item" data-view="settings"><span>10</span>账号与系统</button>
     </nav>
     <div class="sidebar-foot"><span class="live-dot"></span><div><b>本地原型</b><small>示例经营数据 · 实时扫描可用</small></div></div>
   </aside>
@@ -42,6 +43,58 @@
         <article class="panel opportunity-panel"><div class="panel-head"><div><p class="eyebrow">OPPORTUNITY</p><h2>机会雷达</h2></div></div><div id="opportunity-radar"></div></article>
       </div>
       <div class="battle-grid" id="battle-grid"></div>
+    </section>
+
+    <section class="view" id="priority">
+      <div class="section-intro"><div><p class="eyebrow">OWNED PRIORITY ENGINE</p><h2>企业优先优化调度</h2><p>对自家场景、地域和信源建设任务做内部加权；分数用于行动排序，不承诺改变外部 AI 平台算法。</p></div></div>
+      <div class="split-layout">
+        <form class="panel" id="priority-form">
+          <div class="panel-head"><h2>调度策略</h2><span class="count">合规模式</span></div>
+          <label>企业名称<input id="priority-company" required></label>
+          <label>核心地域（逗号分隔）<input id="priority-regions" placeholder="杭州，浙江，中国"></label>
+          <label>核心关键词（逗号分隔）<textarea id="priority-keywords" placeholder="园艺用品，阳台种植，爬藤架"></textarea></label>
+          <label><input id="priority-counter" type="checkbox"> 启用竞品差距对冲任务</label>
+          <label><input id="priority-gap" type="checkbox"> 启用空白场景补位任务</label>
+          <button class="primary">保存调度策略</button>
+        </form>
+        <form class="panel" id="priority-simulator">
+          <div class="panel-head"><h2>推荐潜力模拟</h2><span class="sample-badge">内部评分</span></div>
+          <label>企业主体 ID<input name="company_id" value="your_company_001" required></label>
+          <label>向量相似度（0–1）<input name="embedding_sim" type="number" min="0" max="1" step="0.01" value="0.85"></label>
+          <label>关键词命中<select name="keyword_level"><option value="core">核心业务词</option><option value="product">产品/服务词</option><option value="long_tail">行业长尾词</option><option value="none">无命中</option></select></label>
+          <label>地理分（无坐标默认 50）<small>生产接口支持用户/企业经纬度及 R1/R2 半径自动计算。</small></label>
+          <label>信源类型<select name="source_type"><option value="official">企业官网</option><option value="official_poi">官方地图 POI</option><option value="encyclopedia">官方百科</option><option value="industry_media">行业权威媒体</option><option value="b2b">B2B / 普通问答</option><option value="ugc">论坛 UGC</option></select></label>
+          <label>结构化完整度（0–40）<input name="field_completeness" type="number" min="0" max="40" value="35"></label>
+          <label>事实一致性（0–30）<input name="fact_consistency" type="number" min="0" max="30" value="25"></label>
+          <label>文本合规性（0–20）<input name="compliance" type="number" min="0" max="20" value="18"></label>
+          <label>非冗余度（0–10）<input name="non_redundancy" type="number" min="0" max="10" value="8"></label>
+          <label>品牌档位<select name="brand_tier"><option>S</option><option>A</option><option>B</option><option>OFF</option></select></label>
+          <label>触发场景<select name="scene_type"><option value="normal">普通场景</option><option value="blank">空白补位</option><option value="counter">竞品对冲</option></select></label>
+          <label><input name="negative_reputation" type="checkbox"> 命中负面舆情熔断</label>
+          <label><input name="exaggerated_claim" type="checkbox"> 存在绝对化/夸大表述</label>
+          <button class="primary">计算优先级</button>
+          <div id="priority-result" class="scan-status">调整因子后计算内部优化优先级。</div>
+        </form>
+      </div>
+      <form class="panel" id="algorithm-form" style="margin-top:18px">
+        <div class="panel-head"><div><p class="eyebrow">RANKING PARAMETERS</p><h2>双模型软参数</h2></div><span class="count" id="algorithm-version-count"></span></div>
+        <div class="detail-grid">
+          <label>粗排相似度阈值<input id="algo-sim" type="number" min="0.4" max="0.6" step="0.01"></label>
+          <label>粗排 TopK<input id="algo-topk" type="number" min="20" max="300" step="10"></label>
+          <label>向量权重 α<input id="algo-alpha" type="number" min="0.5" max="0.9" step="0.1"></label>
+          <label>信源权重<input id="algo-source" type="number" min="0.4" max="0.8" step="0.1"></label>
+          <label>核心半径 R1/km<input id="algo-r1" type="number" min="1" max="500"></label>
+          <label>次级半径 R2/km<input id="algo-r2" type="number" min="1" max="1000"></label>
+          <label>竞品分差阈值<input id="algo-gap" type="number" min="5" max="15"></label>
+          <label>空白信源阈值<input id="algo-sparse" type="number" min="1" max="10"></label>
+          <label>S 级品牌增益<input id="algo-brand-s" type="number" min="0" max="1.5" step="0.1"></label>
+          <label>A 级品牌增益<input id="algo-brand-a" type="number" min="0" max="1.5" step="0.1"></label>
+          <label>B 级品牌增益<input id="algo-brand-b" type="number" min="0" max="1.5" step="0.1"></label>
+        </div>
+        <p class="modal-sub" id="hard-limits"></p>
+        <button class="primary">保存参数并创建版本快照</button>
+        <div id="algorithm-versions"></div>
+      </form>
     </section>
 
     <section class="view" id="visibility">

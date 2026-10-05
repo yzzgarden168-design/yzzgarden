@@ -13,13 +13,17 @@ import hashlib
 import hmac
 import io
 import json
+import math
 import os
 import secrets
 import sqlite3
+import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import webbrowser
 from datetime import datetime, timezone
 from http import cookies
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -27,13 +31,94 @@ from pathlib import Path
 
 from aigeo_server import analyze_url
 
-ROOT = Path(__file__).resolve().parent
-DATA_DIR = Path(os.getenv("AIGEO_DATA_DIR", str(ROOT / "runtime_data"))).resolve()
+ASSET_ROOT = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent)).resolve()
+APP_ROOT = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else ASSET_ROOT
+DATA_DIR = Path(os.getenv("AIGEO_DATA_DIR", str(APP_ROOT / "runtime_data"))).resolve()
 DB_PATH = DATA_DIR / "aigeo.sqlite3"
 SESSION_TTL = int(os.getenv("AIGEO_SESSION_TTL", "43200"))
 MAX_BODY = 5_000_000
 COOKIE_SECURE = os.getenv("AIGEO_COOKIE_SECURE", "0") == "1"
 SECRET = os.getenv("AIGEO_SESSION_SECRET", "").encode() or secrets.token_bytes(32)
+OWN_COMPANY_ID = os.getenv("AIGEO_OWN_COMPANY_ID", "your_company_001")
+
+SOURCE_SCORES = {"official":90,"official_poi":90,"encyclopedia":80,"official_social":80,
+                 "industry_media":70,"authority_case":70,"b2b":50,"qa":50,"ugc":20,"anonymous":20}
+BRAND_BOOSTS = {"S":1.5,"A":.8,"B":.3,"OFF":0.0}
+DEFAULT_ALGORITHM_CONFIG = {"sim_th":.45,"top_k_coarse":100,"alpha":.7,"source_weight":.6,
+ "content_weight":.4,"r1_km":30,"r2_km":100,"competitor_gap_threshold":10,"sparse_source_count":3,
+ "brand_s":1.5,"brand_a":.8,"brand_b":.3}
+
+
+def clamp(value, low=0.0, high=100.0):
+    return max(low, min(high, float(value)))
+
+
+def haversine_km(lat1, lon1, lat2, lon2):
+    lat1,lon1,lat2,lon2=map(math.radians,(lat1,lon1,lat2,lon2))
+    dlat=lat2-lat1; dlon=lon2-lon1
+    a=math.sin(dlat/2)**2+math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+    return 6371.0088*2*math.asin(math.sqrt(a))
+
+
+def calculate_priority(payload):
+    """Deterministic, auditable internal RAG/source-priority score."""
+    negative_query=bool(payload.get("negative_query"))
+    embedding=clamp(payload.get("embedding_sim",0),0,1)
+    keyword_score={"core":40,"product":30,"long_tail":20,"none":0}.get(str(payload.get("keyword_level","none")),0)
+    entity_score=clamp(payload.get("intent_entity_score",keyword_score))
+    config={**DEFAULT_ALGORITHM_CONFIG,**payload.get("_config",{})}; alpha=float(config["alpha"])
+    match=0.0 if negative_query else alpha*embedding*100+(1-alpha)*entity_score
+    geo=50.0; distance=None
+    coords=(payload.get("user_lat"),payload.get("user_lon"),payload.get("company_lat"),payload.get("company_lon"))
+    if all(x not in (None,"") for x in coords):
+        distance=haversine_km(*(float(x) for x in coords)); r1=max(.1,float(payload.get("r1_km",config["r1_km"]))); r2=max(r1,float(payload.get("r2_km",config["r2_km"])))
+        geo=100 if distance<=r1 else 80 if distance<=r2 else 40 if payload.get("same_city") else 10 if payload.get("same_province") else 0
+    negative_reputation=bool(payload.get("negative_reputation"))
+    source=SOURCE_SCORES.get(str(payload.get("source_type","b2b")),50)
+    age=float(payload.get("source_age_months",12)); source += 10 if age<=6 else -20 if age>24 else 0
+    registration_match=payload.get("registration_match")
+    if registration_match is True: source+=10
+    elif registration_match is False: source-=15
+    if payload.get("crawl_unstable"): source-=10
+    if negative_reputation: source-=40
+    is_owner=str(payload.get("company_id",""))==OWN_COMPANY_ID
+    if is_owner and payload.get("preferred_source") and str(payload.get("source_type")) in ("official","official_poi"): source=max(80,source)
+    source=clamp(source)
+    content=clamp(clamp(payload.get("field_completeness",0),0,40)+clamp(payload.get("fact_consistency",0),0,30)+clamp(payload.get("compliance",20),0,20)+clamp(payload.get("non_redundancy",10),0,10)-(30 if payload.get("exaggerated_claim") else 0))
+    trust=clamp(float(config["source_weight"])*source+float(config["content_weight"])*content)
+    tier=str(payload.get("brand_tier","OFF")).upper()
+    brand={"S":config["brand_s"],"A":config["brand_a"],"B":config["brand_b"],"OFF":0}.get(tier,0.0) if is_owner else 0.0
+    scene_type=str(payload.get("scene_type","normal")); scene={"blank":.5,"counter":.3,"normal":0.0}.get(scene_type,0.0)
+    if not payload.get("scene_triggered",scene_type!="normal"): scene=0.0
+    if match<40 or trust<40 or negative_reputation: brand=0.0
+    if geo<40: scene=min(scene,.3)
+    if content<40 or negative_reputation: brand=scene=0.0
+    total_boost=min(1.5,brand+scene); base=match*geo*trust/(100**3)*1000
+    final=min(1000,base*(1+total_boost)); final=max(0,final-300) if negative_reputation else final
+    return {"company_id":str(payload.get("company_id","")),"chunk_id":payload.get("chunk_id"),"FinalScore":round(final,2),"BaseScore":round(base,2),"MatchScore":round(match,2),"GeoScore":round(geo,2),"SourceScore":round(source,2),"ContentScore":round(content,2),"TrustScore":round(trust,2),"BrandBoost":brand,"SceneBoost":scene,"AppliedBoost":round(total_boost,2),"SceneType":scene_type,"distance_km":round(distance,2) if distance is not None else None,"RAG_rank":None,"is_own_company":is_owner,"notice":"仅用于本系统内部 RAG 与优化任务排序，不代表外部 AI 平台排名保证。"}
+
+
+def simulate_rag(payload):
+    """Score chunks, filter low-trust items, then aggregate Top-3 per company."""
+    groups={}; rejected=[]
+    for item in payload.get("chunks",[])[:1000]:
+        scored=calculate_priority({**payload.get("defaults",{}),**item,"brand_tier":"OFF","scene_type":"normal"})
+        if scored["TrustScore"]<30: rejected.append(scored); continue
+        groups.setdefault(scored["company_id"],[]).append(scored)
+    enterprises=[]
+    weights=(.5,.3,.2)
+    for company_id,chunks in groups.items():
+        top=sorted(chunks,key=lambda x:x["BaseScore"],reverse=True)[:3]
+        active=weights[:len(top)]; total=sum(active); aggregate=sum(x["BaseScore"]*w for x,w in zip(top,active))/total
+        is_owner=company_id==OWN_COMPANY_ID
+        brand=BRAND_BOOSTS.get(str(payload.get("brand_tier","OFF")).upper(),0) if is_owner else 0
+        scene_type=str(payload.get("scene_type","normal")); scene={"blank":.5,"counter":.3,"normal":0}.get(scene_type,0)
+        if any(x["ContentScore"]<40 for x in top) or any(bool(c.get("negative_reputation")) for c in payload.get("chunks",[]) if str(c.get("company_id"))==company_id): brand=scene=0
+        boost=min(1.5,brand+scene); final=min(1000,aggregate*(1+boost))
+        enterprises.append({"company_id":company_id,"BaseScore":round(aggregate,2),"FinalScore":round(final,2),"BrandBoost":brand,"SceneBoost":scene,"top_chunks":top})
+    enterprises.sort(key=lambda x:x["FinalScore"],reverse=True)
+    for rank,item in enumerate(enterprises,1): item["RAG_rank"]=rank
+    return {"results":enterprises[:10],"accepted_chunks":sum(len(x) for x in groups.values()),"rejected_chunks":len(rejected),"rejected":rejected,"notice":"内部模拟结果，不代表外部 AI 平台实际排序。"}
 
 
 def now_iso():
@@ -92,10 +177,19 @@ def init_db():
         CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY, title TEXT NOT NULL, source TEXT DEFAULT '',
           channel TEXT DEFAULT '', impact TEXT DEFAULT '', status TEXT DEFAULT '待处理', due_at TEXT DEFAULT '',
           created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS priority_settings(id INTEGER PRIMARY KEY CHECK(id=1),
+          company_name TEXT NOT NULL DEFAULT '园之助', company_multiplier REAL NOT NULL DEFAULT 1.8,
+          core_regions TEXT NOT NULL DEFAULT '[]', core_keywords TEXT NOT NULL DEFAULT '[]',
+          counter_competitor INTEGER NOT NULL DEFAULT 1, gap_fill INTEGER NOT NULL DEFAULT 1,
+          updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS algorithm_config(id INTEGER PRIMARY KEY CHECK(id=1), config_json TEXT NOT NULL, updated_by INTEGER, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS algorithm_config_versions(id INTEGER PRIMARY KEY, config_json TEXT NOT NULL, changed_by INTEGER, created_at TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS idx_questions_market ON questions(market, engine);
         CREATE INDEX IF NOT EXISTS idx_observations_question ON observations(question_id, collected_at DESC);
         CREATE INDEX IF NOT EXISTS idx_store_sku ON store_items(sku, platform);
         """)
+        c.execute("INSERT OR IGNORE INTO priority_settings(id,updated_at) VALUES(1,?)", (now_iso(),))
+        c.execute("INSERT OR IGNORE INTO algorithm_config(id,config_json,updated_at) VALUES(1,?,?)",(json.dumps(DEFAULT_ALGORITHM_CONFIG),now_iso()))
         if not c.execute("SELECT 1 FROM users LIMIT 1").fetchone():
             username = os.getenv("AIGEO_ADMIN_USER", "admin")
             password = os.getenv("AIGEO_ADMIN_PASSWORD")
@@ -186,7 +280,7 @@ class Handler(SimpleHTTPRequestHandler):
     server_version = "YuanZhiZhuGEO/1.0"
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=str(ROOT), **kwargs)
+        super().__init__(*args, directory=str(ASSET_ROOT), **kwargs)
 
     def log_message(self, fmt, *args):
         print("[GEO]", fmt % args)
@@ -247,14 +341,24 @@ class Handler(SimpleHTTPRequestHandler):
         if path == "/api/bootstrap":
             user = self.require()
             if not user: return
-            questions = rows("SELECT q.*,o.answer,o.brand_status,o.winner,o.sources,o.collected_at FROM questions q LEFT JOIN observations o ON o.id=(SELECT id FROM observations WHERE question_id=q.id ORDER BY collected_at DESC LIMIT 1) ORDER BY opportunity_score DESC")
+            questions = rows("""SELECT q.*,o.answer,o.brand_status,o.winner,o.sources,o.conditions,o.collected_at,
+              (SELECT COUNT(*) FROM observations ox WHERE ox.question_id=q.id) observation_count
+              FROM questions q LEFT JOIN observations o ON o.id=(SELECT id FROM observations WHERE question_id=q.id ORDER BY collected_at DESC LIMIT 1)
+              ORDER BY opportunity_score DESC""")
             tasks = rows("SELECT * FROM tasks ORDER BY CASE status WHEN '进行中' THEN 0 WHEN '待处理' THEN 1 ELSE 2 END, id DESC")
             products = rows("SELECT p.*,COUNT(s.id) store_count FROM products p LEFT JOIN store_items s ON s.sku=p.sku GROUP BY p.id ORDER BY p.id DESC")
             claims = rows("SELECT * FROM brand_facts ORDER BY id DESC")
-            counts = {"questions":len(questions),"products":len(products),"claims":len(claims),"stores":rows("SELECT COUNT(*) n FROM store_items")[0]["n"]}
+            counts = {"questions":len(questions),"products":len(products),"claims":len(claims),
+                      "stores":rows("SELECT COUNT(*) n FROM store_items")[0]["n"],
+                      "observations":rows("SELECT COUNT(*) n FROM observations")[0]["n"]}
             users = rows("SELECT id,username,display_name,role,active,created_at FROM users ORDER BY id") if user["role"]=="admin" else []
             connections={"ai":bool(os.getenv("AIGEO_AI_API_KEY") or os.getenv("OPENAI_API_KEY")),"secure_cookie":COOKIE_SECURE,"database":"SQLite"}
-            return self.json({"user":user,"csrf":user["csrf"],"questions":questions,"tasks":tasks,"products":products,"claims":claims,"counts":counts,"users":users,"connections":connections})
+            priority = rows("SELECT * FROM priority_settings WHERE id=1")[0]
+            priority["core_regions"] = json.loads(priority["core_regions"] or "[]")
+            priority["core_keywords"] = json.loads(priority["core_keywords"] or "[]")
+            algorithm=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])
+            versions=rows("SELECT id,changed_by,created_at FROM algorithm_config_versions ORDER BY id DESC LIMIT 10") if user["role"]=="admin" else []
+            return self.json({"user":user,"csrf":user["csrf"],"questions":questions,"tasks":tasks,"products":products,"claims":claims,"counts":counts,"users":users,"connections":connections,"priority":priority,"algorithm_config":algorithm,"algorithm_versions":versions,"hard_limits":{"trust_coarse_filter":30,"trust_boost_cutoff":40,"match_boost_cutoff":40,"max_total_boost":1.5,"final_score_cap":1000}})
         if path == "/api/export/products.csv":
             user = self.require()
             if not user: return
@@ -291,8 +395,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return self.json({"ok":True},extra_headers={"Set-Cookie":"aigeo_session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0"})
             user=self.require(csrf=True)
             if not user: return
+            if user["role"] not in ("admin", "operator"):
+                return self.json({"error":"只读账号不能修改数据"},403)
             if path == "/api/products":
-                if user["role"] not in ("admin","operator"): return self.json({"error":"权限不足"},403)
                 sku=str(payload.get("sku","")).strip(); name=str(payload.get("name","")).strip()
                 if not sku or not name: raise ValueError("SKU 和商品名称必填")
                 now=now_iso()
@@ -308,7 +413,8 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/questions":
                 q=str(payload.get("question","")).strip()
                 if not q: raise ValueError("问题不能为空")
-                with db() as c: cur=c.execute("INSERT INTO questions(question,topic,intent,market,engine,opportunity_score,created_at) VALUES(?,?,?,?,?,?,?)",(q,payload.get("topic",""),payload.get("intent","商品选择"),payload.get("market","cn"),payload.get("engine","豆包"),int(payload.get("opportunity_score",50)),now_iso()))
+                score=max(1,min(100,int(payload.get("opportunity_score",50))))
+                with db() as c: cur=c.execute("INSERT INTO questions(question,topic,intent,market,engine,opportunity_score,created_at) VALUES(?,?,?,?,?,?,?)",(q,payload.get("topic",""),payload.get("intent","商品选择"),payload.get("market","cn"),payload.get("engine","豆包"),score,now_iso()))
                 return self.json({"ok":True,"id":cur.lastrowid},201)
             if path == "/api/observations":
                 qid=int(payload.get("question_id",0)); answer=str(payload.get("answer","")).strip()
@@ -330,6 +436,49 @@ class Handler(SimpleHTTPRequestHandler):
                 now=now_iso()
                 with db() as c: c.execute("INSERT INTO brand_facts(entity,claim,evidence,status,expires_at,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",(payload.get("entity","园之助"),claim,payload.get("evidence",""),payload.get("status","待验证"),payload.get("expires_at",""),user["id"],now,now))
                 return self.json({"ok":True},201)
+            if path == "/api/priority/settings":
+                multiplier=float(payload.get("company_multiplier",1.8))
+                if not 1.0 <= multiplier <= 2.5: raise ValueError("企业调度系数必须在 1.0 到 2.5 之间")
+                regions=payload.get("core_regions",[]); keywords=payload.get("core_keywords",[])
+                if not isinstance(regions,list) or not isinstance(keywords,list): raise ValueError("地域和关键词必须是数组")
+                clean=lambda values:[str(x).strip()[:80] for x in values[:100] if str(x).strip()]
+                with db() as c: c.execute("""UPDATE priority_settings SET company_name=?,company_multiplier=?,core_regions=?,core_keywords=?,counter_competitor=?,gap_fill=?,updated_at=? WHERE id=1""",(
+                    str(payload.get("company_name","园之助")).strip()[:100] or "园之助", multiplier,
+                    json.dumps(clean(regions),ensure_ascii=False),json.dumps(clean(keywords),ensure_ascii=False),
+                    1 if payload.get("counter_competitor") else 0,1 if payload.get("gap_fill") else 0,now_iso()))
+                return self.json({"ok":True})
+            if path == "/api/priority/score":
+                payload["_config"]=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])
+                return self.json(calculate_priority(payload))
+            if path == "/api/rag/simulate":
+                if not isinstance(payload.get("chunks"),list): raise ValueError("chunks 必须是数组")
+                payload.setdefault("defaults",{})["_config"]=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])
+                return self.json(simulate_rag(payload))
+            if path == "/api/algorithm/config":
+                if user["role"]!="admin": return self.json({"error":"仅算法管理员可以修改参数"},403)
+                cfg={
+                  "sim_th":clamp(payload.get("sim_th",.45),.4,.6),"top_k_coarse":int(clamp(payload.get("top_k_coarse",100),20,300)),
+                  "alpha":clamp(payload.get("alpha",.7),.5,.9),"source_weight":clamp(payload.get("source_weight",.6),.4,.8),
+                  "r1_km":clamp(payload.get("r1_km",30),1,500),"r2_km":clamp(payload.get("r2_km",100),1,1000),
+                  "competitor_gap_threshold":clamp(payload.get("competitor_gap_threshold",10),5,15),"sparse_source_count":int(clamp(payload.get("sparse_source_count",3),1,10)),
+                  "brand_s":clamp(payload.get("brand_s",1.5),0,1.5),"brand_a":clamp(payload.get("brand_a",.8),0,1.5),"brand_b":clamp(payload.get("brand_b",.3),0,1.5)}
+                if cfg["r2_km"]<cfg["r1_km"]: raise ValueError("R2 必须大于或等于 R1")
+                cfg["content_weight"]=round(1-cfg["source_weight"],4)
+                with db() as c:
+                    old=c.execute("SELECT config_json FROM algorithm_config WHERE id=1").fetchone()[0]
+                    c.execute("INSERT INTO algorithm_config_versions(config_json,changed_by,created_at) VALUES(?,?,?)",(old,user["id"],now_iso()))
+                    c.execute("UPDATE algorithm_config SET config_json=?,updated_by=?,updated_at=? WHERE id=1",(json.dumps(cfg),user["id"],now_iso()))
+                return self.json({"ok":True,"config":cfg})
+            if path == "/api/algorithm/rollback":
+                if user["role"]!="admin": return self.json({"error":"仅算法管理员可以回滚参数"},403)
+                version=int(payload.get("version_id",0))
+                with db() as c:
+                    row=c.execute("SELECT config_json FROM algorithm_config_versions WHERE id=?",(version,)).fetchone()
+                    if not row: raise ValueError("参数版本不存在")
+                    current=c.execute("SELECT config_json FROM algorithm_config WHERE id=1").fetchone()[0]
+                    c.execute("INSERT INTO algorithm_config_versions(config_json,changed_by,created_at) VALUES(?,?,?)",(current,user["id"],now_iso()))
+                    c.execute("UPDATE algorithm_config SET config_json=?,updated_by=?,updated_at=? WHERE id=1",(row[0],user["id"],now_iso()))
+                return self.json({"ok":True})
             if path == "/api/store/import":
                 platform=str(payload.get("platform","")).strip(); records=payload.get("records",[])
                 if not platform or not isinstance(records,list): raise ValueError("平台和 records 数组必填")
@@ -367,5 +516,11 @@ if __name__ == "__main__":
     init_db()
     seed_demo_data()
     host=os.getenv("AIGEO_HOST","127.0.0.1"); port=int(os.getenv("PORT",os.getenv("AIGEO_PORT","8765")))
-    print(f"园之助 GEO Growth OS: http://{host}:{port}")
-    ThreadingHTTPServer((host,port),Handler).serve_forever()
+    url=f"http://{host}:{port}"
+    print(f"园之助 GEO Growth OS: {url}")
+    if os.getenv("AIGEO_OPEN_BROWSER", "1") == "1" and host in ("127.0.0.1", "localhost"):
+        threading.Timer(.8, lambda: webbrowser.open(url)).start()
+    try:
+        ThreadingHTTPServer((host,port),Handler).serve_forever()
+    except KeyboardInterrupt:
+        print("\n服务已停止。")

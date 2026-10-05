@@ -1,5 +1,11 @@
 .env
 runtime_data/
+runtime_test/
+runtime_verify*/
+build/
+dist/
+*.spec
+grid_search_*.csv
 __pycache__/
 *.pyc
 *.sqlite3
