@@ -24,6 +24,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from http import cookies
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -159,13 +160,35 @@ def calculate_brand_diagnostic(payload):
             "notice":"这是基于输入证据的诊断分，不是任何平台披露的内部搜索权重，也不承诺排名。"}
 
 
+def discover_public_urls(brand, limit=5):
+    query=urllib.parse.quote(f'"{brand}" 品牌 官网 产品')
+    req=urllib.request.Request("https://www.bing.com/search?format=rss&setlang=zh-hans&mkt=zh-CN&q="+query,headers={"User-Agent":"Mozilla/5.0 AIGEO-Reputation-Radar/1.0"})
+    try:
+        with urllib.request.urlopen(req,timeout=15) as response:
+            root=ET.fromstring(response.read(1_000_000))
+    except (urllib.error.URLError,ET.ParseError) as exc:
+        raise ValueError("自动搜索暂时不可用，请稍后重试或手工粘贴公开链接") from exc
+    urls=[]
+    for item in root.findall(".//item"):
+        link=(item.findtext("link") or "").strip()
+        context=((item.findtext("title") or "")+" "+(item.findtext("description") or "")).lower()
+        if brand.lower() not in context: continue
+        if link and link not in urls: urls.append(link)
+        if len(urls)>=limit: break
+    return urls
+
+
 def collect_brand_evidence(payload):
     """Inspect user-selected public pages; never pretend this is platform-wide coverage."""
     brand=str(payload.get("brand","")).strip()[:100]
     if not brand: raise ValueError("请先填写品牌名称")
     urls=payload.get("urls",[])
     if isinstance(urls,str): urls=[x.strip() for x in urls.replace("，","\n").splitlines() if x.strip()]
-    if not isinstance(urls,list) or not urls: raise ValueError("请至少提供一个公开网页链接")
+    if not isinstance(urls,list): raise ValueError("链接格式无效")
+    discovered=not urls
+    if discovered: urls=discover_public_urls(brand)
+    if not urls:
+        return {"brand":brand,"discovered":True,"sources":[],"summary":{"submitted":0,"reachable":0,"brand_matches":0,"average_quality":0,"evidence_score":0},"notice":"未发现包含该品牌名称的可靠公开结果，当前只能判定为数据不足；请补充官网、商品页或报道链接后重试。"}
     sources=[]
     for raw_url in urls[:5]:
         try:
@@ -178,7 +201,7 @@ def collect_brand_evidence(payload):
     matched=sum(1 for x in reachable if x["brand_matched"])
     average=round(sum(x["quality"] for x in reachable)/len(reachable),1) if reachable else 0
     evidence_score=round(.6*(matched/len(sources)*100)+.4*average,1)
-    return {"brand":brand,"sources":sources,"summary":{"submitted":len(sources),"reachable":len(reachable),"brand_matches":matched,"average_quality":average,"evidence_score":evidence_score},"notice":"只核验你提供的公开网页，不代表全网声量；登录平台需使用官方导出或开放接口。"}
+    return {"brand":brand,"discovered":discovered,"sources":sources,"summary":{"submitted":len(sources),"reachable":len(reachable),"brand_matches":matched,"average_quality":average,"evidence_score":evidence_score},"notice":"这是公开搜索结果的抽样核验，不代表全网声量；同名品牌请补充官网链接，登录平台需使用官方导出或开放接口。"}
 
 
 def now_iso():

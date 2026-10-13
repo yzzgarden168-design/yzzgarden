@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from production_server import OWN_COMPANY_ID, calculate_brand_diagnostic, calculate_priority, collect_brand_evidence, simulate_rag
 
 class PriorityEngineTests(unittest.TestCase):
@@ -43,5 +43,23 @@ class PriorityEngineTests(unittest.TestCase):
         result=collect_brand_evidence({"brand":"任意品牌","urls":["https://example.com"]})
         self.assertEqual(result["summary"]["brand_matches"],1)
         self.assertEqual(result["summary"]["evidence_score"],92)
+    @patch("production_server.discover_public_urls",return_value=["https://example.com"])
+    @patch("production_server.analyze_url")
+    def test_brand_only_automatically_discovers_sources(self, scan, discover):
+        scan.return_value={"url":"https://example.com","score":70,"scannedAt":"2026-10-13T00:00:00+08:00","metrics":{"title":"品牌页","matchedKeywords":["苏望"]}}
+        result=collect_brand_evidence({"brand":"苏望","urls":[]})
+        self.assertTrue(result["discovered"])
+        self.assertEqual(result["summary"]["reachable"],1)
+    @patch("production_server.urllib.request.urlopen")
+    def test_discovery_filters_unrelated_search_results(self, open_url):
+        response=MagicMock(); response.read.return_value=b'<rss><channel><item><title>Apple support</title><description>Phone help</description><link>https://example.com</link></item></channel></rss>'
+        open_url.return_value.__enter__.return_value=response
+        from production_server import discover_public_urls
+        self.assertEqual(discover_public_urls("苏望"),[])
+    @patch("production_server.discover_public_urls",return_value=[])
+    def test_brand_with_no_search_evidence_returns_insufficient_result(self, discover):
+        result=collect_brand_evidence({"brand":"苏望","urls":[]})
+        self.assertEqual(result["summary"]["evidence_score"],0)
+        self.assertIn("数据不足",result["notice"])
 
 if __name__ == "__main__": unittest.main()

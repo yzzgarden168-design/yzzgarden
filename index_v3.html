@@ -129,31 +129,31 @@
       <div class="section-intro"><div><p class="eyebrow">CHINA REPUTATION RADAR</p><h2>国内平台口碑与品牌知名度</h2><p>统一记录主流电商、社媒和搜索平台的真实评价，先解决负面问题，再把可信案例转成 AI 可引用内容。</p></div><button class="primary" id="add-review">＋ 录入评价</button></div>
       <form class="panel brand-lab" id="brand-test-form" style="margin-bottom:18px">
         <div class="panel-head"><div><p class="eyebrow">BRAND DIAGNOSTIC</p><h2>任意品牌 AIGEO 测试</h2></div><span class="sample-badge">证据输入 · 透明评分</span></div>
-        <p class="modal-sub">先核验公开网页，再补充平台实测数据。未知项填 0，品牌名称本身不加分。</p>
+        <p class="modal-sub">只填品牌即可自动搜索公开网页；如有官网或报道链接，粘贴后结果更准确。未知项填 0，品牌名称本身不加分。</p>
         <div class="brand-step"><span>1</span><div><b>品牌与公开证据</b><small>最多核验 5 个无需登录即可访问的网页</small></div></div>
         <div class="detail-grid brand-evidence-input">
           <label>品牌名称<input name="brand" value="园之助" required></label>
-          <label class="wide-field">公开证据链接（每行一个）<textarea id="brand-evidence-urls" rows="3" placeholder="品牌官网、百科、媒体报道、公开商品页……"></textarea></label>
+          <label class="wide-field">公开证据链接（可选，每行一个）<textarea id="brand-evidence-urls" rows="3" placeholder="留空将自动搜索；也可粘贴品牌官网、百科、媒体报道、公开商品页……"></textarea></label>
         </div>
-        <div class="inline-actions"><button class="ghost" id="collect-brand-evidence" type="button">联网核验公开证据</button><span id="brand-evidence-hint">尚未联网核验</span></div>
+        <div class="inline-actions"><button class="ghost" id="collect-brand-evidence" type="button">自动搜索并预测</button><span id="brand-evidence-hint">尚未联网核验</span></div>
         <div id="brand-evidence-result" class="evidence-grid"></div>
         <input name="web_evidence" id="web-evidence-score" type="hidden" value="0">
         <div class="brand-step"><span>2</span><div><b>补充真实平台样本</b><small>使用同一口径，便于每月复测</small></div></div>
         <div class="detail-grid diagnostic-fields">
-          <label>AI 实测问题数<input name="ai_tested" type="number" min="0" value="20"></label>
-          <label>AI 提及次数<input name="ai_mentions" type="number" min="0" value="6"></label>
-          <label>AI 前三次数<input name="ai_top3" type="number" min="0" value="2"></label>
-          <label>AI 引用覆盖率 %<input name="ai_citation" type="number" min="0" max="100" value="30"></label>
-          <label>AI 事实准确率 %<input name="ai_accuracy" type="number" min="0" max="100" value="80"></label>
-          <label>覆盖电商平台数（最多 6）<input name="ecommerce_platforms" type="number" min="0" max="6" value="4"></label>
-          <label>店铺平均评分（1–5）<input name="store_rating" type="number" min="1" max="5" step="0.1" value="4.3"></label>
-          <label>电商好评率 %<input name="review_positive" type="number" min="0" max="100" value="85"></label>
-          <label>商品信息一致率 %<input name="product_consistency" type="number" min="0" max="100" value="75"></label>
-          <label>覆盖社媒平台数（最多 6）<input name="social_platforms" type="number" min="0" max="6" value="4"></label>
-          <label>社媒月提及量<input name="monthly_mentions" type="number" min="0" value="80"></label>
-          <label>社媒互动率 %<input name="engagement_rate" type="number" min="0" max="10" step="0.1" value="3"></label>
-          <label>社媒正面率 %<input name="social_positive" type="number" min="0" max="100" value="70"></label>
-          <label>官网证据完整度 %<input name="official_evidence" type="number" min="0" max="100" value="60"></label>
+          <label>AI 实测问题数<input name="ai_tested" type="number" min="0" value="0"></label>
+          <label>AI 提及次数<input name="ai_mentions" type="number" min="0" value="0"></label>
+          <label>AI 前三次数<input name="ai_top3" type="number" min="0" value="0"></label>
+          <label>AI 引用覆盖率 %<input name="ai_citation" type="number" min="0" max="100" value="0"></label>
+          <label>AI 事实准确率 %<input name="ai_accuracy" type="number" min="0" max="100" value="0"></label>
+          <label>覆盖电商平台数（最多 6）<input name="ecommerce_platforms" type="number" min="0" max="6" value="0"></label>
+          <label>店铺平均评分（1–5）<input name="store_rating" type="number" min="0" max="5" step="0.1" value="0"></label>
+          <label>电商好评率 %<input name="review_positive" type="number" min="0" max="100" value="0"></label>
+          <label>商品信息一致率 %<input name="product_consistency" type="number" min="0" max="100" value="0"></label>
+          <label>覆盖社媒平台数（最多 6）<input name="social_platforms" type="number" min="0" max="6" value="0"></label>
+          <label>社媒月提及量<input name="monthly_mentions" type="number" min="0" value="0"></label>
+          <label>社媒互动率 %<input name="engagement_rate" type="number" min="0" max="10" step="0.1" value="0"></label>
+          <label>社媒正面率 %<input name="social_positive" type="number" min="0" max="100" value="0"></label>
+          <label>官网证据完整度 %<input name="official_evidence" type="number" min="0" max="100" value="0"></label>
         </div>
         <div class="brand-submit"><button class="primary">生成品牌诊断与优化方案</button><small>结果会保存为本月基线，可与下次测试比较</small></div>
         <div id="brand-test-result" class="scan-status">评分依据由你输入的真实信号决定，不读取或猜测平台内部算法。</div>
