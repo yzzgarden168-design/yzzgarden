@@ -181,6 +181,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS tasks(id INTEGER PRIMARY KEY, title TEXT NOT NULL, source TEXT DEFAULT '',
           channel TEXT DEFAULT '', impact TEXT DEFAULT '', status TEXT DEFAULT '待处理', due_at TEXT DEFAULT '',
           created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS brand_reviews(id INTEGER PRIMARY KEY, platform TEXT NOT NULL,
+          channel_type TEXT NOT NULL DEFAULT '社媒', rating INTEGER NOT NULL DEFAULT 3,
+          sentiment TEXT NOT NULL DEFAULT '中性', topic TEXT DEFAULT '', content TEXT NOT NULL,
+          source_url TEXT DEFAULT '', published_at TEXT DEFAULT '', created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS priority_settings(id INTEGER PRIMARY KEY CHECK(id=1),
           company_name TEXT NOT NULL DEFAULT '园之助', company_multiplier REAL NOT NULL DEFAULT 1.8,
           core_regions TEXT NOT NULL DEFAULT '[]', core_keywords TEXT NOT NULL DEFAULT '[]',
@@ -191,6 +195,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_questions_market ON questions(market, engine);
         CREATE INDEX IF NOT EXISTS idx_observations_question ON observations(question_id, collected_at DESC);
         CREATE INDEX IF NOT EXISTS idx_store_sku ON store_items(sku, platform);
+        CREATE INDEX IF NOT EXISTS idx_reviews_platform ON brand_reviews(platform, sentiment);
         """)
         c.execute("INSERT OR IGNORE INTO priority_settings(id,updated_at) VALUES(1,?)", (now_iso(),))
         c.execute("INSERT OR IGNORE INTO algorithm_config(id,config_json,updated_at) VALUES(1,?,?)",(json.dumps(DEFAULT_ALGORITHM_CONFIG),now_iso()))
@@ -259,6 +264,23 @@ def seed_demo_data():
             ]
             c.executemany("INSERT INTO store_items(platform,external_id,sku,title,price,stock,url,raw_json,synced_at) VALUES(?,?,?,?,?,?,?,?,?)",
                           [(p,e,s,t,pr,st,u,"{}",now) for p,e,s,t,pr,st,u in stores])
+        if not c.execute("SELECT 1 FROM brand_reviews LIMIT 1").fetchone():
+            reviews=[
+                ("天猫","电商",5,"正面","安装","安装说明清楚，阳台使用比较省空间"),
+                ("京东","电商",4,"正面","材质","支架稳固，规格描述基本准确"),
+                ("拼多多","电商",3,"中性","价格","价格有吸引力，希望型号说明更统一"),
+                ("抖音电商","电商",2,"负面","安装","短视频展示清楚，但收到后不会固定"),
+                ("小红书","社媒",4,"正面","场景","阳台番茄搭配效果好，适合新手参考"),
+                ("抖音","社媒",4,"正面","内容","实测内容直观，希望增加不同植物案例"),
+                ("视频号","社媒",3,"中性","知名度","产品不错，但品牌认知度还不高"),
+                ("微博","社媒",3,"中性","品牌","品牌讨论量偏少，需要稳定输出"),
+                ("知乎","社媒",4,"正面","专业度","规格与使用边界讲清楚后更容易被信任"),
+                ("哔哩哔哩","社媒",3,"中性","内容","缺少完整安装和长期使用测评"),
+                ("快手","社媒",3,"中性","覆盖","下沉市场内容和真实案例还不够"),
+                ("百度","搜索",2,"负面","信源","可检索的品牌资料和权威页面较少"),
+            ]
+            c.executemany("INSERT INTO brand_reviews(platform,channel_type,rating,sentiment,topic,content,created_at) VALUES(?,?,?,?,?,?,?)",
+                          [(p,ch,r,s,t,ct,now) for p,ch,r,s,t,ct in reviews])
 
 
 def sign_token(token):
@@ -355,7 +377,8 @@ class Handler(SimpleHTTPRequestHandler):
             tasks = rows("SELECT * FROM tasks ORDER BY CASE status WHEN '进行中' THEN 0 WHEN '待处理' THEN 1 ELSE 2 END, id DESC")
             products = rows("SELECT p.*,COUNT(s.id) store_count FROM products p LEFT JOIN store_items s ON s.sku=p.sku GROUP BY p.id ORDER BY p.id DESC")
             claims = rows("SELECT * FROM brand_facts ORDER BY id DESC")
-            counts = {"questions":len(questions),"products":len(products),"claims":len(claims),
+            reviews = rows("SELECT * FROM brand_reviews ORDER BY id DESC")
+            counts = {"questions":len(questions),"products":len(products),"claims":len(claims),"reviews":len(reviews),
                       "stores":rows("SELECT COUNT(*) n FROM store_items")[0]["n"],
                       "observations":rows("SELECT COUNT(*) n FROM observations")[0]["n"]}
             users = rows("SELECT id,username,display_name,role,active,created_at FROM users ORDER BY id") if user["role"]=="admin" else []
@@ -365,7 +388,7 @@ class Handler(SimpleHTTPRequestHandler):
             priority["core_keywords"] = json.loads(priority["core_keywords"] or "[]")
             algorithm=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])
             versions=rows("SELECT id,changed_by,created_at FROM algorithm_config_versions ORDER BY id DESC LIMIT 10") if user["role"]=="admin" else []
-            return self.json({"user":user,"csrf":user["csrf"],"questions":questions,"tasks":tasks,"products":products,"claims":claims,"counts":counts,"users":users,"connections":connections,"priority":priority,"algorithm_config":algorithm,"algorithm_versions":versions,"hard_limits":{"trust_coarse_filter":30,"trust_boost_cutoff":40,"match_boost_cutoff":40,"max_total_boost":1.5,"final_score_cap":1000}})
+            return self.json({"user":user,"csrf":user["csrf"],"questions":questions,"tasks":tasks,"products":products,"claims":claims,"reviews":reviews,"counts":counts,"users":users,"connections":connections,"priority":priority,"algorithm_config":algorithm,"algorithm_versions":versions,"hard_limits":{"trust_coarse_filter":30,"trust_boost_cutoff":40,"match_boost_cutoff":40,"max_total_boost":1.5,"final_score_cap":1000}})
         if path == "/api/export/products.csv":
             user = self.require()
             if not user: return
@@ -442,6 +465,16 @@ class Handler(SimpleHTTPRequestHandler):
                 if not claim: raise ValueError("声明内容不能为空")
                 now=now_iso()
                 with db() as c: c.execute("INSERT INTO brand_facts(entity,claim,evidence,status,expires_at,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)",(payload.get("entity","园之助"),claim,payload.get("evidence",""),payload.get("status","待验证"),payload.get("expires_at",""),user["id"],now,now))
+                return self.json({"ok":True},201)
+            if path == "/api/reviews":
+                platform=str(payload.get("platform","")).strip()[:40]
+                content=str(payload.get("content","")).strip()[:2000]
+                sentiment=str(payload.get("sentiment","中性"))
+                if not platform or not content: raise ValueError("平台和评价内容必填")
+                if sentiment not in ("正面","中性","负面"): raise ValueError("情感分类无效")
+                rating=int(clamp(payload.get("rating",3),1,5))
+                with db() as c: c.execute("INSERT INTO brand_reviews(platform,channel_type,rating,sentiment,topic,content,source_url,published_at,created_at) VALUES(?,?,?,?,?,?,?,?,?)",(
+                    platform,str(payload.get("channel_type","社媒"))[:20],rating,sentiment,str(payload.get("topic",""))[:80],content,str(payload.get("source_url",""))[:500],str(payload.get("published_at",""))[:30],now_iso()))
                 return self.json({"ok":True},201)
             if path == "/api/priority/settings":
                 multiplier=float(payload.get("company_multiplier",1.8))

@@ -18,11 +18,12 @@
       <button class="nav-item" data-view="priority"><span>03</span>优先推荐引擎</button>
       <button class="nav-item" data-view="truth"><span>04</span>品牌真相中心</button>
       <button class="nav-item" data-view="content"><span>05</span>内容与证据</button>
-      <button class="nav-item" data-view="channels"><span>06</span>渠道战台</button>
-      <button class="nav-item" data-view="audit"><span>07</span>技术审计</button>
-      <button class="nav-item" data-view="tasks"><span>08</span>任务中心</button>
-      <button class="nav-item" data-view="outcomes"><span>09</span>效果与归因</button>
-      <button class="nav-item" data-view="settings"><span>10</span>账号与系统</button>
+      <button class="nav-item" data-view="reputation"><span>06</span>国内口碑雷达</button>
+      <button class="nav-item" data-view="channels"><span>07</span>渠道战台</button>
+      <button class="nav-item" data-view="audit"><span>08</span>技术审计</button>
+      <button class="nav-item" data-view="tasks"><span>09</span>任务中心</button>
+      <button class="nav-item" data-view="outcomes"><span>10</span>效果与归因</button>
+      <button class="nav-item" data-view="settings"><span>11</span>账号与系统</button>
     </nav>
     <div class="sidebar-foot"><span class="live-dot"></span><div><b>本地原型</b><small>示例经营数据 · 实时扫描可用</small></div></div>
   </aside>
@@ -122,6 +123,17 @@
     <section class="view" id="channels">
       <div class="view-toolbar"><div class="tabs" id="channel-tabs"><button class="active" data-channel="doubao">豆包专项</button><button data-channel="domestic">国内六店</button><button data-channel="meta">Meta / 美国</button></div></div>
       <div id="channel-content"></div>
+    </section>
+
+    <section class="view" id="reputation">
+      <div class="section-intro"><div><p class="eyebrow">CHINA REPUTATION RADAR</p><h2>国内平台口碑与品牌知名度</h2><p>统一记录主流电商、社媒和搜索平台的真实评价，先解决负面问题，再把可信案例转成 AI 可引用内容。</p></div><button class="primary" id="add-review">＋ 录入评价</button></div>
+      <div class="metric-grid" id="reputation-metrics"></div>
+      <div class="split-layout">
+        <article class="panel"><div class="panel-head"><h2>平台表现</h2><span class="count" id="platform-count"></span></div><div id="reputation-platforms"></div></article>
+        <article class="panel"><div class="panel-head"><h2>现实优先动作</h2><span class="sample-badge">按口碑缺口生成</span></div><div id="reputation-actions"></div></article>
+      </div>
+      <div class="table-card" style="margin-top:18px"><table><thead><tr><th>平台</th><th>类型</th><th>倾向</th><th>评分</th><th>主题</th><th>评价摘要</th></tr></thead><tbody id="review-table"></tbody></table></div>
+      <p class="modal-sub">数据边界：首版采用人工录入或平台官方导出；自动同步需要各平台开放接口、企业资质和账号授权，不使用违规抓取。</p>
     </section>
 
     <section class="view" id="audit">
