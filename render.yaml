@@ -11,6 +11,8 @@ services:
         value: "1"
       - key: AIGEO_PUBLIC_DEMO
         value: "1"
+      - key: AIGEO_PUBLIC_DEMO_ROLE
+        value: operator
       - key: AIGEO_DEMO_MODE
         value: "1"
       - key: AIGEO_DATA_DIR
