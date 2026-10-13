@@ -125,6 +125,32 @@ def simulate_rag(payload):
     return {"results":enterprises[:10],"accepted_chunks":sum(len(x) for x in groups.values()),"rejected_chunks":len(rejected),"rejected":rejected,"notice":"内部模拟结果，不代表外部 AI 平台实际排序。"}
 
 
+def calculate_brand_diagnostic(payload):
+    """Transparent 0-100 diagnostic from user-supplied, auditable signals."""
+    brand=str(payload.get("brand","")).strip()[:100]
+    if not brand: raise ValueError("品牌名称不能为空")
+    tested=max(0,int(payload.get("ai_tested",0))); mentions=max(0,min(tested,int(payload.get("ai_mentions",0))))
+    top3=max(0,min(mentions,int(payload.get("ai_top3",0))))
+    pct=lambda key:clamp(payload.get(key,0),0,100)
+    ratio=lambda n,d:(n/d*100 if d else 0)
+    evidence=pct("official_evidence")
+    ai=round(.30*ratio(mentions,tested)+.20*ratio(top3,tested)+.20*pct("ai_citation")+.20*pct("ai_accuracy")+.10*evidence,1)
+    ecommerce=round(.25*clamp(float(payload.get("ecommerce_platforms",0))/6*100)+.25*clamp((float(payload.get("store_rating",0))-1)/4*100)+.25*pct("review_positive")+.25*pct("product_consistency"),1)
+    social_volume=clamp(math.log10(max(0,float(payload.get("monthly_mentions",0)))+1)/3*100)
+    social=round(.20*clamp(float(payload.get("social_platforms",0))/6*100)+.25*social_volume+.20*clamp(float(payload.get("engagement_rate",0))/10*100)+.25*pct("social_positive")+.10*evidence,1)
+    overall=round(.45*ai+.30*ecommerce+.25*social,1)
+    weakest=min(((ai,"AI 可见性"),(ecommerce,"电商口碑"),(social,"社媒声量")))[1]
+    plan=[]
+    if pct("product_consistency")<80: plan.append({"stage":"本周","action":"统一商品事实","detail":"先统一各店铺的品牌名、型号、规格、材质、安装方法和售后口径。"})
+    if pct("review_positive")<80 or pct("social_positive")<70: plan.append({"stage":"本周","action":"处理真实负面问题","detail":"按产品、安装、物流、客服归类；先整改，再回访，不做虚假评价。"})
+    if ai<70: plan.append({"stage":"30 天","action":"建立 AI 问题测试集","detail":"在豆包、DeepSeek、元宝、文小言、通义、Kimi 用同一批真实消费者问题复测品牌提及、前三与引用。"})
+    if evidence<80: plan.append({"stage":"30 天","action":"建设可引用证据页","detail":"官网发布带日期、作者、规格表、检测依据、安装步骤和常见问答的独立页面。"})
+    if social<70: plan.append({"stage":"60 天","action":"稳定发布真实案例","detail":"每周至少 2 个真实使用案例，优先解决高频问题，并从短内容链接回完整证据页。"})
+    if not plan: plan.append({"stage":"持续","action":"扩大高质量覆盖","detail":"保持事实一致，每月复测 AI 回答并补齐新问题、新评价和新引用。"})
+    return {"brand":brand,"scores":{"ai_visibility":ai,"ecommerce":ecommerce,"social":social,"overall":overall},"weakest":weakest,"plan":plan,
+            "notice":"这是基于输入证据的诊断分，不是任何平台披露的内部搜索权重，也不承诺排名。"}
+
+
 def now_iso():
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
 
@@ -490,6 +516,8 @@ class Handler(SimpleHTTPRequestHandler):
             if path == "/api/priority/score":
                 payload["_config"]=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])
                 return self.json(calculate_priority(payload))
+            if path == "/api/brand-test":
+                return self.json(calculate_brand_diagnostic(payload))
             if path == "/api/rag/simulate":
                 if not isinstance(payload.get("chunks"),list): raise ValueError("chunks 必须是数组")
                 payload.setdefault("defaults",{})["_config"]=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])

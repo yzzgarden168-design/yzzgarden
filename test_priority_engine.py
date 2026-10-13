@@ -1,5 +1,5 @@
 import unittest
-from production_server import OWN_COMPANY_ID, calculate_priority, simulate_rag
+from production_server import OWN_COMPANY_ID, calculate_brand_diagnostic, calculate_priority, simulate_rag
 
 class PriorityEngineTests(unittest.TestCase):
     def payload(self, **changes):
@@ -24,5 +24,13 @@ class PriorityEngineTests(unittest.TestCase):
         result=simulate_rag({"chunks":chunks,"brand_tier":"S","scene_type":"normal"})
         self.assertEqual(len(result["results"][0]["top_chunks"]),3)
         self.assertEqual(result["rejected_chunks"],1)
+    def test_brand_diagnostic_is_bounded_and_explained(self):
+        result=calculate_brand_diagnostic({"brand":"园之助","ai_tested":20,"ai_mentions":6,"ai_top3":2,"ai_citation":30,"ai_accuracy":80,"ecommerce_platforms":4,"store_rating":4.3,"review_positive":85,"product_consistency":75,"social_platforms":4,"monthly_mentions":80,"engagement_rate":3,"social_positive":70,"official_evidence":60})
+        self.assertTrue(all(0 <= score <= 100 for score in result["scores"].values()))
+        self.assertTrue(result["plan"])
+        self.assertIn("不是任何平台",result["notice"])
+    def test_brand_name_alone_does_not_create_weight(self):
+        result=calculate_brand_diagnostic({"brand":"任意品牌"})
+        self.assertEqual(result["scores"]["overall"],0)
 
 if __name__ == "__main__": unittest.main()
