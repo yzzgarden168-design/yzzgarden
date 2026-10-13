@@ -133,7 +133,8 @@ def calculate_brand_diagnostic(payload):
     top3=max(0,min(mentions,int(payload.get("ai_top3",0))))
     pct=lambda key:clamp(payload.get(key,0),0,100)
     ratio=lambda n,d:(n/d*100 if d else 0)
-    evidence=pct("official_evidence")
+    web_evidence=pct("web_evidence")
+    evidence=max(pct("official_evidence"),round(web_evidence*.8,1))
     ai=round(.30*ratio(mentions,tested)+.20*ratio(top3,tested)+.20*pct("ai_citation")+.20*pct("ai_accuracy")+.10*evidence,1)
     ecommerce=round(.25*clamp(float(payload.get("ecommerce_platforms",0))/6*100)+.25*clamp((float(payload.get("store_rating",0))-1)/4*100)+.25*pct("review_positive")+.25*pct("product_consistency"),1)
     social_volume=clamp(math.log10(max(0,float(payload.get("monthly_mentions",0)))+1)/3*100)
@@ -143,7 +144,7 @@ def calculate_brand_diagnostic(payload):
     trust=round(.25*pct("ai_accuracy")+.25*rating_score+.20*pct("review_positive")+.15*pct("social_positive")+.15*evidence,1)
     consistency=round(.60*pct("product_consistency")+.40*evidence,1)
     overall=round(.45*awareness+.35*trust+.20*consistency,1)
-    confidence=round(.35*clamp(tested/30*100)+.20*clamp(float(payload.get("ecommerce_platforms",0))/6*100)+.20*clamp(float(payload.get("social_platforms",0))/6*100)+.15*clamp(float(payload.get("monthly_mentions",0))/100*100)+.10*evidence,1)
+    confidence=round(.32*clamp(tested/30*100)+.18*clamp(float(payload.get("ecommerce_platforms",0))/6*100)+.18*clamp(float(payload.get("social_platforms",0))/6*100)+.12*clamp(float(payload.get("monthly_mentions",0))/100*100)+.10*evidence+.10*web_evidence,1)
     level="未建立" if overall<30 else "起步" if overall<50 else "成长" if overall<70 else "强势" if overall<85 else "领先"
     confidence_level="初步" if confidence<50 else "可用" if confidence<75 else "较可靠"
     weakest=min(((ai,"AI 可见性"),(ecommerce,"电商口碑"),(social,"社媒声量")))[1]
@@ -156,6 +157,28 @@ def calculate_brand_diagnostic(payload):
     if not plan: plan.append({"stage":"持续","action":"扩大高质量覆盖","detail":"保持事实一致，每月复测 AI 回答并补齐新问题、新评价和新引用。"})
     return {"brand":brand,"scores":{"ai_visibility":ai,"ecommerce":ecommerce,"social":social,"awareness":awareness,"trust":trust,"consistency":consistency,"overall":overall},"level":level,"confidence":confidence,"confidence_level":confidence_level,"weakest":weakest,"plan":plan,
             "notice":"这是基于输入证据的诊断分，不是任何平台披露的内部搜索权重，也不承诺排名。"}
+
+
+def collect_brand_evidence(payload):
+    """Inspect user-selected public pages; never pretend this is platform-wide coverage."""
+    brand=str(payload.get("brand","")).strip()[:100]
+    if not brand: raise ValueError("请先填写品牌名称")
+    urls=payload.get("urls",[])
+    if isinstance(urls,str): urls=[x.strip() for x in urls.replace("，","\n").splitlines() if x.strip()]
+    if not isinstance(urls,list) or not urls: raise ValueError("请至少提供一个公开网页链接")
+    sources=[]
+    for raw_url in urls[:5]:
+        try:
+            scan=analyze_url(str(raw_url),[brand])
+            matched=brand in scan["metrics"]["matchedKeywords"]
+            sources.append({"url":scan["url"],"title":scan["metrics"]["title"] or scan["url"],"status":"已核验","brand_matched":matched,"quality":scan["score"],"scanned_at":scan["scannedAt"]})
+        except ValueError as exc:
+            sources.append({"url":str(raw_url)[:500],"title":"无法读取","status":str(exc),"brand_matched":False,"quality":0,"scanned_at":now_iso()})
+    reachable=[x for x in sources if x["status"]=="已核验"]
+    matched=sum(1 for x in reachable if x["brand_matched"])
+    average=round(sum(x["quality"] for x in reachable)/len(reachable),1) if reachable else 0
+    evidence_score=round(.6*(matched/len(sources)*100)+.4*average,1)
+    return {"brand":brand,"sources":sources,"summary":{"submitted":len(sources),"reachable":len(reachable),"brand_matches":matched,"average_quality":average,"evidence_score":evidence_score},"notice":"只核验你提供的公开网页，不代表全网声量；登录平台需使用官方导出或开放接口。"}
 
 
 def now_iso():
@@ -535,6 +558,8 @@ class Handler(SimpleHTTPRequestHandler):
                     result["delta"]=round(result["scores"]["overall"]-previous[0],1) if previous else None
                     c.execute("INSERT INTO brand_tests(brand,input_json,result_json,overall,confidence,created_at) VALUES(?,?,?,?,?,?)",(result["brand"],json.dumps(payload,ensure_ascii=False),json.dumps(result,ensure_ascii=False),result["scores"]["overall"],result["confidence"],now_iso()))
                 return self.json(result)
+            if path == "/api/brand-evidence":
+                return self.json(collect_brand_evidence(payload))
             if path == "/api/rag/simulate":
                 if not isinstance(payload.get("chunks"),list): raise ValueError("chunks 必须是数组")
                 payload.setdefault("defaults",{})["_config"]=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])
