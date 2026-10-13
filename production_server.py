@@ -38,6 +38,7 @@ DB_PATH = DATA_DIR / "aigeo.sqlite3"
 SESSION_TTL = int(os.getenv("AIGEO_SESSION_TTL", "43200"))
 MAX_BODY = 5_000_000
 COOKIE_SECURE = os.getenv("AIGEO_COOKIE_SECURE", "0") == "1"
+PUBLIC_DEMO = os.getenv("AIGEO_PUBLIC_DEMO", "0") == "1"
 SECRET = os.getenv("AIGEO_SESSION_SECRET", "").encode() or secrets.token_bytes(32)
 OWN_COMPANY_ID = os.getenv("AIGEO_OWN_COMPANY_ID", "your_company_001")
 
@@ -314,6 +315,9 @@ class Handler(SimpleHTTPRequestHandler):
         return {"raw": raw.decode("utf-8-sig")}
 
     def user(self):
+        if PUBLIC_DEMO:
+            return {"id": 0, "username": "public-demo", "display_name": "公开演示", "role": "viewer",
+                    "csrf": "public-demo-read-only", "expires_at": int(time.time()) + SESSION_TTL}
         jar = cookies.SimpleCookie(self.headers.get("Cookie", ""))
         signed = jar.get("aigeo_session")
         token = verify_token(signed.value) if signed else None

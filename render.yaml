@@ -9,6 +9,10 @@ services:
         value: 0.0.0.0
       - key: AIGEO_COOKIE_SECURE
         value: "1"
+      - key: AIGEO_PUBLIC_DEMO
+        value: "1"
+      - key: AIGEO_DEMO_MODE
+        value: "1"
       - key: AIGEO_DATA_DIR
         value: /tmp/aigeo-data
       - key: AIGEO_ADMIN_USER
