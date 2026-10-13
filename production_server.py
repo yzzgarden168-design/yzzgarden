@@ -138,16 +138,23 @@ def calculate_brand_diagnostic(payload):
     ecommerce=round(.25*clamp(float(payload.get("ecommerce_platforms",0))/6*100)+.25*clamp((float(payload.get("store_rating",0))-1)/4*100)+.25*pct("review_positive")+.25*pct("product_consistency"),1)
     social_volume=clamp(math.log10(max(0,float(payload.get("monthly_mentions",0)))+1)/3*100)
     social=round(.20*clamp(float(payload.get("social_platforms",0))/6*100)+.25*social_volume+.20*clamp(float(payload.get("engagement_rate",0))/10*100)+.25*pct("social_positive")+.10*evidence,1)
-    overall=round(.45*ai+.30*ecommerce+.25*social,1)
+    rating_score=clamp((float(payload.get("store_rating",0))-1)/4*100)
+    awareness=round(.40*ai+.35*social+.25*ecommerce,1)
+    trust=round(.25*pct("ai_accuracy")+.25*rating_score+.20*pct("review_positive")+.15*pct("social_positive")+.15*evidence,1)
+    consistency=round(.60*pct("product_consistency")+.40*evidence,1)
+    overall=round(.45*awareness+.35*trust+.20*consistency,1)
+    confidence=round(.35*clamp(tested/30*100)+.20*clamp(float(payload.get("ecommerce_platforms",0))/6*100)+.20*clamp(float(payload.get("social_platforms",0))/6*100)+.15*clamp(float(payload.get("monthly_mentions",0))/100*100)+.10*evidence,1)
+    level="未建立" if overall<30 else "起步" if overall<50 else "成长" if overall<70 else "强势" if overall<85 else "领先"
+    confidence_level="初步" if confidence<50 else "可用" if confidence<75 else "较可靠"
     weakest=min(((ai,"AI 可见性"),(ecommerce,"电商口碑"),(social,"社媒声量")))[1]
     plan=[]
-    if pct("product_consistency")<80: plan.append({"stage":"本周","action":"统一商品事实","detail":"先统一各店铺的品牌名、型号、规格、材质、安装方法和售后口径。"})
-    if pct("review_positive")<80 or pct("social_positive")<70: plan.append({"stage":"本周","action":"处理真实负面问题","detail":"按产品、安装、物流、客服归类；先整改，再回访，不做虚假评价。"})
-    if ai<70: plan.append({"stage":"30 天","action":"建立 AI 问题测试集","detail":"在豆包、DeepSeek、元宝、文小言、通义、Kimi 用同一批真实消费者问题复测品牌提及、前三与引用。"})
-    if evidence<80: plan.append({"stage":"30 天","action":"建设可引用证据页","detail":"官网发布带日期、作者、规格表、检测依据、安装步骤和常见问答的独立页面。"})
-    if social<70: plan.append({"stage":"60 天","action":"稳定发布真实案例","detail":"每周至少 2 个真实使用案例，优先解决高频问题，并从短内容链接回完整证据页。"})
+    if pct("product_consistency")<80: plan.append({"stage":"7 天","action":"统一商品事实","detail":"统一各店铺的品牌名、型号、规格、材质、安装方法和售后口径。","target":"商品信息一致率达到 90%"})
+    if pct("review_positive")<80 or pct("social_positive")<70: plan.append({"stage":"7 天","action":"处理真实负面问题","detail":"按产品、安装、物流、客服归类；先整改，再回访，不做虚假评价。","target":"负面问题关闭率达到 80%"})
+    if ai<70: plan.append({"stage":"30 天","action":"建立 AI 问题测试集","detail":"在豆包、DeepSeek、元宝、文小言、通义、Kimi 用同一批真实消费者问题复测品牌提及、前三与引用。","target":"至少 30 个问题，月度固定复测"})
+    if evidence<80: plan.append({"stage":"30 天","action":"建设可引用证据页","detail":"官网发布带日期、作者、规格表、检测依据、安装步骤和常见问答的独立页面。","target":"官网证据完整度达到 80%"})
+    if social<70: plan.append({"stage":"90 天","action":"稳定发布真实案例","detail":"每周至少 2 个真实使用案例，优先解决高频问题，并从短内容链接回完整证据页。","target":"月提及量提升 50%，正面率达到 75%"})
     if not plan: plan.append({"stage":"持续","action":"扩大高质量覆盖","detail":"保持事实一致，每月复测 AI 回答并补齐新问题、新评价和新引用。"})
-    return {"brand":brand,"scores":{"ai_visibility":ai,"ecommerce":ecommerce,"social":social,"overall":overall},"weakest":weakest,"plan":plan,
+    return {"brand":brand,"scores":{"ai_visibility":ai,"ecommerce":ecommerce,"social":social,"awareness":awareness,"trust":trust,"consistency":consistency,"overall":overall},"level":level,"confidence":confidence,"confidence_level":confidence_level,"weakest":weakest,"plan":plan,
             "notice":"这是基于输入证据的诊断分，不是任何平台披露的内部搜索权重，也不承诺排名。"}
 
 
@@ -211,6 +218,9 @@ def init_db():
           channel_type TEXT NOT NULL DEFAULT '社媒', rating INTEGER NOT NULL DEFAULT 3,
           sentiment TEXT NOT NULL DEFAULT '中性', topic TEXT DEFAULT '', content TEXT NOT NULL,
           source_url TEXT DEFAULT '', published_at TEXT DEFAULT '', created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS brand_tests(id INTEGER PRIMARY KEY, brand TEXT NOT NULL,
+          input_json TEXT NOT NULL, result_json TEXT NOT NULL, overall REAL NOT NULL,
+          confidence REAL NOT NULL, created_at TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS priority_settings(id INTEGER PRIMARY KEY CHECK(id=1),
           company_name TEXT NOT NULL DEFAULT '园之助', company_multiplier REAL NOT NULL DEFAULT 1.8,
           core_regions TEXT NOT NULL DEFAULT '[]', core_keywords TEXT NOT NULL DEFAULT '[]',
@@ -404,6 +414,7 @@ class Handler(SimpleHTTPRequestHandler):
             products = rows("SELECT p.*,COUNT(s.id) store_count FROM products p LEFT JOIN store_items s ON s.sku=p.sku GROUP BY p.id ORDER BY p.id DESC")
             claims = rows("SELECT * FROM brand_facts ORDER BY id DESC")
             reviews = rows("SELECT * FROM brand_reviews ORDER BY id DESC")
+            brand_tests = rows("SELECT id,brand,overall,confidence,created_at FROM brand_tests ORDER BY id DESC LIMIT 20")
             counts = {"questions":len(questions),"products":len(products),"claims":len(claims),"reviews":len(reviews),
                       "stores":rows("SELECT COUNT(*) n FROM store_items")[0]["n"],
                       "observations":rows("SELECT COUNT(*) n FROM observations")[0]["n"]}
@@ -414,7 +425,7 @@ class Handler(SimpleHTTPRequestHandler):
             priority["core_keywords"] = json.loads(priority["core_keywords"] or "[]")
             algorithm=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])
             versions=rows("SELECT id,changed_by,created_at FROM algorithm_config_versions ORDER BY id DESC LIMIT 10") if user["role"]=="admin" else []
-            return self.json({"user":user,"csrf":user["csrf"],"questions":questions,"tasks":tasks,"products":products,"claims":claims,"reviews":reviews,"counts":counts,"users":users,"connections":connections,"priority":priority,"algorithm_config":algorithm,"algorithm_versions":versions,"hard_limits":{"trust_coarse_filter":30,"trust_boost_cutoff":40,"match_boost_cutoff":40,"max_total_boost":1.5,"final_score_cap":1000}})
+            return self.json({"user":user,"csrf":user["csrf"],"questions":questions,"tasks":tasks,"products":products,"claims":claims,"reviews":reviews,"brand_tests":brand_tests,"counts":counts,"users":users,"connections":connections,"priority":priority,"algorithm_config":algorithm,"algorithm_versions":versions,"hard_limits":{"trust_coarse_filter":30,"trust_boost_cutoff":40,"match_boost_cutoff":40,"max_total_boost":1.5,"final_score_cap":1000}})
         if path == "/api/export/products.csv":
             user = self.require()
             if not user: return
@@ -517,7 +528,13 @@ class Handler(SimpleHTTPRequestHandler):
                 payload["_config"]=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])
                 return self.json(calculate_priority(payload))
             if path == "/api/brand-test":
-                return self.json(calculate_brand_diagnostic(payload))
+                result=calculate_brand_diagnostic(payload)
+                with db() as c:
+                    previous=c.execute("SELECT overall FROM brand_tests WHERE brand=? ORDER BY id DESC LIMIT 1",(result["brand"],)).fetchone()
+                    result["previous_overall"]=previous[0] if previous else None
+                    result["delta"]=round(result["scores"]["overall"]-previous[0],1) if previous else None
+                    c.execute("INSERT INTO brand_tests(brand,input_json,result_json,overall,confidence,created_at) VALUES(?,?,?,?,?,?)",(result["brand"],json.dumps(payload,ensure_ascii=False),json.dumps(result,ensure_ascii=False),result["scores"]["overall"],result["confidence"],now_iso()))
+                return self.json(result)
             if path == "/api/rag/simulate":
                 if not isinstance(payload.get("chunks"),list): raise ValueError("chunks 必须是数组")
                 payload.setdefault("defaults",{})["_config"]=json.loads(rows("SELECT config_json FROM algorithm_config WHERE id=1")[0]["config_json"])
