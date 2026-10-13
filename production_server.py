@@ -40,7 +40,7 @@ MAX_BODY = 5_000_000
 COOKIE_SECURE = os.getenv("AIGEO_COOKIE_SECURE", "0") == "1"
 PUBLIC_DEMO = os.getenv("AIGEO_PUBLIC_DEMO", "0") == "1"
 PUBLIC_DEMO_ROLE = os.getenv("AIGEO_PUBLIC_DEMO_ROLE", "viewer")
-if PUBLIC_DEMO_ROLE not in ("viewer", "operator"):
+if PUBLIC_DEMO_ROLE not in ("viewer", "operator", "admin"):
     PUBLIC_DEMO_ROLE = "viewer"
 SECRET = os.getenv("AIGEO_SESSION_SECRET", "").encode() or secrets.token_bytes(32)
 OWN_COMPANY_ID = os.getenv("AIGEO_OWN_COMPANY_ID", "your_company_001")
